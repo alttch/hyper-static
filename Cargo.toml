@@ -1,0 +1,20 @@
+[package]
+name = "hyper-static"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Sergei S. <div@altertech.com>"]
+repository = "https://github.com/alttch/hyper-static"
+description = ""
+keywords = ["hyper", "static", "file", "server", "http", "web", "async"]
+
+[dependencies]
+hyper = { version = "0.14.18", features = ["stream"] }
+tokio = { version = "1.15.0", features = ["io-util", "fs"] }
+hex = "0.4.3"
+async-stream = "0.3.3"
+chrono = "0.4.19"
+chrono-tz = "0.6.1"
+futures = "0.3.21"
+sha2 = "0.10.2"
+bmart-derive = "0.1.2"
