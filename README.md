@@ -1,6 +1,7 @@
 # hyper-static - a static file handler for Rust/Hyper with minimal logic
 
 Crate: <https://crates.io/crates/hyper-static>
+
 Repository: <https://github.com/alttch/hyper-static>
 
 The idea is to have a static file handler with no overhead. Make any handler
