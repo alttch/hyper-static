@@ -15,13 +15,15 @@ give the crate a path and that is it.
 Example:
 
 ```rust,ignore
+use hyper_static::serve::static_file;
+
 // define some hyper handler
 async fn handler(req: Request<Body>) -> Result<Response<Body>, http::Error> {
     // ....
     // serve a file when necessary
     // in a simple way
     let path = std::path::Path::new("/path/to/file");
-    return match serve::file(
+    return match static_file(
         &path,
         Some("text/html"), // mime type
         &req.headers(), // hyper request header map
