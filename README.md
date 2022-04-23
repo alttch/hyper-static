@@ -1,15 +1,15 @@
 # hyper-static - a static file handler for Rust/Hyper with minimal logic
 
-Crate: <https://crates.io/crates/hyper-static>
-
-Repository: <https://github.com/alttch/hyper-static>
+* Crate: <https://crates.io/crates/hyper-static>
+* Repository: <https://github.com/alttch/hyper-static>
 
 The idea is to have a static file handler with no overhead. Make any handler
 function for Hyper, with own logic, if a static file needs to be returned -
 give the crate a path and that is it.
 
 * serves large files with zero-copy buffers
-* correctly processes partial requests (Content-Range)
+* correctly handles partial requests (Content-Range)
+* handles If-Modified-Since, If-None-Match
 * crate errors can be transformed directly into Hyper results
 
 Example:

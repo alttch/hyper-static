@@ -4,11 +4,12 @@ use hyper::{http, Body, Response, StatusCode};
 use sha2::{Digest, Sha256};
 use std::io::SeekFrom;
 use std::path::Path;
-use std::time::SystemTime;
 use tokio::fs::File;
 use tokio::io::AsyncSeekExt;
 
 pub static DEFAULT_MIME_TYPE: &str = "application/octet-stream";
+
+const TIME_STR: &str = "%a, %d %b %Y %T %Z";
 
 #[derive(Debug, EnumStr, Copy, Clone, Eq, PartialEq)]
 pub enum ErrorKind {
@@ -81,6 +82,7 @@ struct Range {
     end: Option<u64>,
 }
 
+#[inline]
 fn parse_range(range_hdr: &hyper::header::HeaderValue) -> Result<Range, Error> {
     let hdr = range_hdr.to_str().map_err(|_| Error::bad_req())?;
     let mut sp = hdr.splitn(2, '=');
@@ -108,6 +110,17 @@ fn parse_range(range_hdr: &hyper::header::HeaderValue) -> Result<Range, Error> {
     }
 }
 
+#[inline]
+fn etag_match(inm_hdr: &hyper::header::HeaderValue, etag: &str) -> Result<bool, Error> {
+    let hdr = inm_hdr.to_str().map_err(|_| Error::bad_req())?;
+    for t in hdr.split(',') {
+        if t.trim() == etag {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 macro_rules! partial_resp {
     ($l: expr, $et: expr, $mt: expr) => {
         Response::builder()
@@ -115,7 +128,9 @@ macro_rules! partial_resp {
             .header(hyper::header::ACCEPT_RANGES, "bytes")
             .header(
                 hyper::header::LAST_MODIFIED,
-                $l.format("%a, %d %b %Y %T GMT").to_string(),
+                $l.with_timezone(&chrono_tz::GMT)
+                    .format(TIME_STR)
+                    .to_string(),
             )
             .header("ETag", $et)
             .header(
@@ -125,10 +140,11 @@ macro_rules! partial_resp {
     };
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn static_file<'a>(
     file_path: &Path,
     mime_type: Option<&str>,
-    map: &hyper::header::HeaderMap,
+    headers: &hyper::header::HeaderMap,
     buf_size: usize,
 ) -> Result<Result<Response<Body>, http::Error>, Error> {
     macro_rules! forbidden {
@@ -141,14 +157,21 @@ pub async fn static_file<'a>(
             return Err(Error::internal($err))
         };
     }
-    let range = if let Some(range_hdr) = map.get(hyper::header::RANGE) {
+    macro_rules! not_modified {
+        () => {
+            return Ok(Response::builder()
+                .status(StatusCode::NOT_MODIFIED)
+                .body(Body::empty()));
+        };
+    }
+    let range = if let Some(range_hdr) = headers.get(hyper::header::RANGE) {
         Some(parse_range(range_hdr)?)
     } else {
         None
     };
     let (mut f, size, last_modified, etag) = match File::open(file_path).await {
         Ok(v) => {
-            let (size, last_modified) = match v.metadata().await {
+            let (size, lmt) = match v.metadata().await {
                 Ok(m) => {
                     if m.is_dir() {
                         forbidden!();
@@ -165,21 +188,15 @@ pub async fn static_file<'a>(
                     int_error!(e);
                 }
             };
-            let timestamp = match last_modified.duration_since(SystemTime::UNIX_EPOCH) {
-                Ok(v) => v,
-                Err(e) => {
-                    int_error!(e);
-                }
-            };
+            let last_modified: chrono::DateTime<chrono::Utc> = lmt.into();
             let mut hasher = Sha256::new();
             hasher.update(file_path.to_string_lossy().as_bytes());
-            hasher.update(timestamp.as_secs().to_le_bytes());
-            hasher.update(timestamp.subsec_nanos().to_le_bytes());
+            hasher.update(last_modified.timestamp().to_le_bytes());
+            hasher.update(last_modified.timestamp_subsec_nanos().to_le_bytes());
             (
                 v,
                 size,
-                Into::<chrono::DateTime<chrono::Utc>>::into(last_modified)
-                    .with_timezone(&chrono_tz::GMT),
+                last_modified,
                 format!(r#""{}""#, hex::encode(hasher.finalize())),
             )
         }
@@ -196,6 +213,17 @@ pub async fn static_file<'a>(
             int_error!(e);
         }
     };
+    if let Some(h) = headers.get(hyper::header::IF_NONE_MATCH) {
+        if etag_match(h, &etag)? {
+            not_modified!();
+        }
+    } else if let Some(h) = headers.get(hyper::header::IF_MODIFIED_SINCE) {
+        let hdr = h.to_str().map_err(|_| Error::bad_req())?;
+        let dt = chrono::DateTime::parse_from_rfc2822(hdr).map_err(|_| Error::bad_req())?;
+        if last_modified.timestamp() == dt.timestamp() {
+            not_modified!();
+        }
+    }
     Ok(if let Some(rn) = range {
         if rn.end.map_or_else(|| rn.start < size, |v| v >= rn.start)
             && f.seek(SeekFrom::Start(rn.start)).await.is_ok()
