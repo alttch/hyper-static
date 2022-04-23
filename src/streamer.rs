@@ -54,7 +54,7 @@ where
                     remaining as usize
                 };
                 let mut buf = vec![0; bs];
-                let r = self.reader.read_exact(&mut buf).await?;
+                let r = self.reader.read(&mut buf).await?;
                 if r == 0 {
                     break;
                 } else {
