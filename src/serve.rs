@@ -121,14 +121,14 @@ fn etag_match(inm_hdr: &hyper::header::HeaderValue, etag: &str) -> Result<bool, 
     Ok(false)
 }
 
-macro_rules! partial_resp {
-    ($l: expr, $et: expr, $mt: expr) => {
+macro_rules! resp {
+    ($code: expr, $lm: expr, $et: expr, $mt: expr) => {
         Response::builder()
-            .status(StatusCode::PARTIAL_CONTENT)
+            .status($code)
             .header(hyper::header::ACCEPT_RANGES, "bytes")
             .header(
                 hyper::header::LAST_MODIFIED,
-                $l.with_timezone(&chrono_tz::GMT)
+                $lm.with_timezone(&chrono_tz::GMT)
                     .format(TIME_STR)
                     .to_string(),
             )
@@ -232,7 +232,7 @@ pub async fn static_file<'a>(
                 .end
                 .map_or_else(|| size - rn.start, |end| end - rn.start + 1);
             let reader = Streamer::new(f, buf_size);
-            partial_resp!(last_modified, etag, mime_type)
+            resp!(StatusCode::PARTIAL_CONTENT, last_modified, etag, mime_type)
                 .header(
                     hyper::header::CONTENT_RANGE,
                     format!("bytes {}-{}/{}", rn.start, rn.end.unwrap_or(size - 1), size),
@@ -248,7 +248,7 @@ pub async fn static_file<'a>(
         }
     } else {
         let reader = Streamer::new(f, buf_size);
-        partial_resp!(last_modified, etag, mime_type)
+        resp!(StatusCode::OK, last_modified, etag, mime_type)
             .header(hyper::header::CONTENT_LENGTH, size)
             .body(Body::wrap_stream(reader.into_stream()))
     })
