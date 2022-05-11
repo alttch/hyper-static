@@ -1,4 +1,5 @@
 use async_stream::stream;
+use compression::prelude::*;
 use futures::{Stream, StreamExt};
 use std::io::Error;
 use std::pin::Pin;
@@ -32,6 +33,25 @@ where
                 }
                 buf.truncate(r);
                 yield Ok(buf);
+            }
+        };
+        stream.boxed()
+    }
+    pub fn into_gzipped_stream(
+        mut self,
+    ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Vec<u8>, Error>> + 'static>> {
+        let stream = stream! {
+            loop {
+                let mut buf = vec![0; self.buf_size];
+                let r = self.reader.read(&mut buf).await?;
+                if r == 0 {
+                    break
+                }
+                buf.truncate(r);
+                let compressed = buf.into_iter().encode(
+                        &mut GZipEncoder::new(), Action::Finish)
+                    .collect::<Result<Vec<_>, _>>().unwrap();
+                yield Ok(compressed);
             }
         };
         stream.boxed()

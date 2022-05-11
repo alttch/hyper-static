@@ -1,7 +1,9 @@
 use crate::streamer::Streamer;
 use bmart_derive::EnumStr;
 use hyper::{http, Body, Response, StatusCode};
+use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::io::SeekFrom;
 use std::path::Path;
 use tokio::fs::File;
@@ -10,6 +12,30 @@ use tokio::io::AsyncSeekExt;
 pub static DEFAULT_MIME_TYPE: &str = "application/octet-stream";
 
 const TIME_STR: &str = "%a, %d %b %Y %T %Z";
+
+const DEFAULT_GZIP_MIN_LEN: usize = 20;
+
+static GZIP_MIME_TYPES: OnceCell<HashSet<String>> = OnceCell::new();
+static GZIP_MIN_LEN: OnceCell<usize> = OnceCell::new();
+
+/// Set mime types which are allowed to be compressed
+///
+/// # Panics
+///
+/// Will panic if called more than once
+pub fn set_gzip_mime_types(gzip_types: &[&str]) {
+    let gt: HashSet<String> = gzip_types.iter().map(|v| Into::into(*v)).collect();
+    GZIP_MIME_TYPES.set(gt).unwrap();
+}
+
+/// Set min file length for be compressed if possible
+///
+/// # Panics
+///
+/// Will panic if called more than once
+pub fn set_gzip_min_len(min_len: usize) {
+    GZIP_MIN_LEN.set(min_len).unwrap();
+}
 
 #[derive(Debug, EnumStr, Copy, Clone, Eq, PartialEq)]
 pub enum ErrorKind {
@@ -121,6 +147,18 @@ fn etag_match(inm_hdr: &hyper::header::HeaderValue, etag: &str) -> Result<bool, 
     Ok(false)
 }
 
+#[inline]
+fn gzip_match(inm_hdr: &hyper::header::HeaderValue) -> Result<bool, Error> {
+    let hdr = inm_hdr.to_str().map_err(|_| Error::bad_req())?;
+    for t in hdr.split(',') {
+        let t_trimmed = t.trim();
+        if t_trimmed == "gzip" || t_trimmed == "x-gzip" {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 macro_rules! resp {
     ($code: expr, $lm: expr, $et: expr, $mt: expr) => {
         Response::builder()
@@ -170,8 +208,8 @@ pub async fn static_file<'a>(
         None
     };
     let (mut f, size, last_modified, etag) = match File::open(file_path).await {
-        Ok(v) => {
-            let (size, lmt) = match v.metadata().await {
+        Ok(f) => {
+            let (size, lmt) = match f.metadata().await {
                 Ok(m) => {
                     if m.is_dir() {
                         forbidden!();
@@ -194,7 +232,7 @@ pub async fn static_file<'a>(
             hasher.update(last_modified.timestamp().to_le_bytes());
             hasher.update(last_modified.timestamp_subsec_nanos().to_le_bytes());
             (
-                v,
+                f,
                 size,
                 last_modified,
                 format!(r#""{}""#, hex::encode(hasher.finalize())),
@@ -247,6 +285,21 @@ pub async fn static_file<'a>(
                 .body(Body::empty())
         }
     } else {
+        if let Some(gt) = GZIP_MIME_TYPES.get() {
+            if buf_size >= GZIP_MIN_LEN.get().map_or(DEFAULT_GZIP_MIN_LEN, |v| *v) {
+                if let Some(enc) = headers.get(&hyper::header::ACCEPT_ENCODING) {
+                    if let Some(mt) = mime_type {
+                        if gzip_match(enc)? && gt.contains(mt) {
+                            let reader = Streamer::new(f, buf_size);
+                            return Ok(resp!(StatusCode::OK, last_modified, etag, mime_type)
+                                .header(hyper::header::CONTENT_ENCODING, "gzip")
+                                //.header(hyper::header::TRANSFER_ENCODING, "gzip")
+                                .body(Body::wrap_stream(reader.into_gzipped_stream())));
+                        }
+                    }
+                }
+            }
+        }
         let reader = Streamer::new(f, buf_size);
         resp!(StatusCode::OK, last_modified, etag, mime_type)
             .header(hyper::header::CONTENT_LENGTH, size)

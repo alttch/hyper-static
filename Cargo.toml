@@ -18,3 +18,5 @@ chrono-tz = "0.6.1"
 futures = "0.3.21"
 sha2 = "0.10.2"
 bmart-derive = "0.1.2"
+once_cell = "1.10.0"
+compression = { version = "0.1.5", features = ["gzip"] }

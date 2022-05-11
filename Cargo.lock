@@ -96,6 +96,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "compression"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a82b366ae14633c67a1cbb4aa3738210a23f77d2868a0fd50faa23a956f9ec4"
+dependencies = [
+ "cfg-if",
+ "lazy_static",
+ "log",
+ "num-traits",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -310,9 +322,11 @@ dependencies = [
  "bmart-derive",
  "chrono",
  "chrono-tz",
+ "compression",
  "futures",
  "hex",
  "hyper",
+ "once_cell",
  "sha2",
  "tokio",
 ]
@@ -368,6 +382,12 @@ checksum = "9a64b1ec5cda2586e284722486d802acf1f7dbdc623e2bfc57e65ca1cd099290"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "once_cell"
+version = "1.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
 
 [[package]]
 name = "parse-zoneinfo"
