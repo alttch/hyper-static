@@ -1,7 +1,7 @@
 use crate::streamer::Streamer;
 use bmart_derive::EnumStr;
 use hyper::{http, Body, Response, StatusCode};
-use sha2::{Digest, Sha256};
+use openssl::sha::Sha256;
 use std::io::SeekFrom;
 use std::path::Path;
 use tokio::fs::File;
@@ -191,13 +191,13 @@ pub async fn static_file<'a>(
             let last_modified: chrono::DateTime<chrono::Utc> = lmt.into();
             let mut hasher = Sha256::new();
             hasher.update(file_path.to_string_lossy().as_bytes());
-            hasher.update(last_modified.timestamp().to_le_bytes());
-            hasher.update(last_modified.timestamp_subsec_nanos().to_le_bytes());
+            hasher.update(&last_modified.timestamp().to_le_bytes());
+            hasher.update(&last_modified.timestamp_subsec_nanos().to_le_bytes());
             (
                 v,
                 size,
                 last_modified,
-                format!(r#""{}""#, hex::encode(hasher.finalize())),
+                format!(r#""{}""#, hex::encode(hasher.finish())),
             )
         }
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {

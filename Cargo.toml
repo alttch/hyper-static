@@ -1,6 +1,6 @@
 [package]
 name = "hyper-static"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 license = "MIT"
 authors = ["Sergei S. <div@altertech.com>"]
@@ -16,5 +16,8 @@ async-stream = "0.3.3"
 chrono = "0.4.19"
 chrono-tz = "0.6.1"
 futures = "0.3.21"
-sha2 = "0.10.2"
 bmart-derive = "0.1.2"
+openssl = "0.10.42"
+
+[features]
+openssl-vendored = ["openssl/vendored"]
