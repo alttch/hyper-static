@@ -1,7 +1,7 @@
 use crate::streamer::Streamer;
 use bmart_derive::EnumStr;
 use hyper::{http, Body, Response, StatusCode};
-use openssl::sha::Sha256;
+use sha2::{Sha256, digest::Digest};
 use std::io::SeekFrom;
 use std::path::Path;
 use tokio::fs::File;
@@ -197,7 +197,7 @@ pub async fn static_file<'a>(
                 v,
                 size,
                 last_modified,
-                format!(r#""{}""#, hex::encode(hasher.finish())),
+                format!(r#""{}""#, hex::encode(hasher.finalize())),
             )
         }
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
