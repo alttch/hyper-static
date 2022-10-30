@@ -1,7 +1,6 @@
 use crate::streamer::Streamer;
 use bmart_derive::EnumStr;
 use hyper::{http, Body, Response, StatusCode};
-use sha2::{Sha256, digest::Digest};
 use std::io::SeekFrom;
 use std::path::Path;
 use tokio::fs::File;
@@ -189,7 +188,7 @@ pub async fn static_file<'a>(
                 }
             };
             let last_modified: chrono::DateTime<chrono::Utc> = lmt.into();
-            let mut hasher = Sha256::new();
+            let mut hasher = hashing::Sha256::new();
             hasher.update(file_path.to_string_lossy().as_bytes());
             hasher.update(&last_modified.timestamp().to_le_bytes());
             hasher.update(&last_modified.timestamp_subsec_nanos().to_le_bytes());
@@ -252,4 +251,54 @@ pub async fn static_file<'a>(
             .header(hyper::header::CONTENT_LENGTH, size)
             .body(Body::wrap_stream(reader.into_stream()))
     })
+}
+
+mod hashing {
+
+    #[cfg(feature = "hashing-openssl")]
+    #[repr(transparent)]
+    pub struct Sha256(openssl::sha::Sha256);
+
+    #[cfg(feature = "hashing-openssl")]
+    impl Sha256 {
+        #[inline]
+        pub fn new() -> Self {
+            Self(openssl::sha::Sha256::new())
+        }
+
+        #[inline]
+        pub fn update(&mut self, bytes: &[u8]) {
+            self.0.update(bytes);
+        }
+
+        #[inline]
+        pub fn finalize(self) -> impl AsRef<[u8]> {
+            self.0.finish()
+        }
+    }
+
+    #[cfg(all(not(feature = "hashing-openssl"), feature = "hashing-sha2"))]
+    #[repr(transparent)]
+    pub struct Sha256(sha2::Sha256);
+
+    #[cfg(all(not(feature = "hashing-openssl"), feature = "hashing-sha2"))]
+    impl Sha256 {
+        #[inline]
+        pub fn new() -> Self {
+            use sha2::Digest;
+            Self(sha2::Sha256::new())
+        }
+
+        #[inline]
+        pub fn update(&mut self, bytes: &[u8]) {
+            use sha2::Digest;
+            self.0.update(bytes);
+        }
+
+        #[inline]
+        pub fn finalize(self) -> impl AsRef<[u8]> {
+            use sha2::Digest;
+            self.0.finalize()
+        }
+    }
 }
