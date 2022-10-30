@@ -254,7 +254,6 @@ pub async fn static_file<'a>(
 }
 
 mod hashing {
-
     #[cfg(feature = "hashing-openssl")]
     #[repr(transparent)]
     pub struct Sha256(openssl::sha::Sha256);
@@ -299,6 +298,30 @@ mod hashing {
         pub fn finalize(self) -> impl AsRef<[u8]> {
             use sha2::Digest;
             self.0.finalize()
+        }
+    }
+
+    #[cfg(not(any(feature = "hashing-openssl", feature = "hashing-sha2")))]
+    pub struct Sha256;
+
+    #[cfg(not(any(feature = "hashing-openssl", feature = "hashing-sha2")))]
+    impl Sha256 {
+        compile_error!(
+            "some hashing implementation should be specified via one of \"hashing-\" features"
+        );
+
+        pub fn new() -> Self {
+            unimplemented!();
+        }
+
+        #[inline]
+        pub fn update(&mut self, _bytes: &[u8]) {
+            unimplemented!();
+        }
+
+        #[inline]
+        pub fn finalize(self) -> [u8; 32] {
+            unimplemented!();
         }
     }
 }
