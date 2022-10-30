@@ -43,7 +43,7 @@ where
         max_length: u64,
     ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Vec<u8>, Error>> + 'static>> {
         let stream = stream! {
-        let mut remaining = max_length;
+            let mut remaining = max_length;
             loop {
                 if remaining == 0 {
                     break;
