@@ -1,0 +1,43 @@
+name: Test
+on:
+  push:
+    branches: [ '**' ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extra-cargo-args:
+          - ''
+          - '--all-features'
+          - '--no-default-features --features=hashing-openssl'
+          - '--no-default-features --features=hashing-sha2'
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3.1.0
+      - name: Cache Cargo files
+        uses: actions/cache@v3.0.10
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1.0.7
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Run tests
+        uses: actions-rs/cargo@v1.0.3
+        with:
+          command: test
+          args: --verbose ${{ matrix.extra-cargo-args }}
