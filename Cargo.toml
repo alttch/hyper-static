@@ -17,7 +17,10 @@ chrono = "0.4.19"
 chrono-tz = "0.7.0"
 futures = "0.3.21"
 bmart-derive = "0.1.2"
-openssl = "0.10.42"
+sha2 = { version = "0.10.6", optional = true }
+openssl = { version = "0.10.42", optional = true }
 
 [features]
-openssl-vendored = ["openssl/vendored"]
+default = ["hashing-openssl"]
+hashing-openssl = ["openssl"]
+hashing-sha2 = ["sha2"]
