@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    target-branch: development
+    allow:
+      - dependency-type: all
+    open-pull-requests-limit: 10
+    reviewers: [ divi255 ]
+    labels: [ dependencies, automatic ]
+    schedule:
+      interval: daily
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: development
+    open-pull-requests-limit: 10
+    reviewers: [ divi255 ]
+    labels: [ dependencies, automatic ]
+    schedule:
+      interval: daily
