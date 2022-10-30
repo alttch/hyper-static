@@ -302,7 +302,7 @@ mod hashing {
     }
 
     #[cfg(not(any(feature = "hashing-openssl", feature = "hashing-sha2")))]
-    pub enum Sha256 {}
+    pub struct Sha256;
 
     #[cfg(not(any(feature = "hashing-openssl", feature = "hashing-sha2")))]
     impl Sha256 {
