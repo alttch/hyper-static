@@ -1,8 +1,47 @@
 use async_stream::stream;
 use futures::{Stream, StreamExt};
+use hyper::body::{Body, Buf, Frame, SizeHint};
+use std::collections::VecDeque;
 use std::io::Error;
+use std::marker::PhantomData;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncReadExt};
+
+#[derive(Default)]
+pub struct Empty<D> {
+    _marker: PhantomData<fn() -> D>,
+}
+
+impl<D> Empty<D>
+where
+    D: Default,
+{
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<D: Buf> Body for Empty<D> {
+    type Data = D;
+    type Error = Error;
+
+    #[inline]
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        Poll::Ready(None)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        true
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        SizeHint::with_exact(0)
+    }
+}
 
 pub struct Streamer<R>
 where
@@ -22,7 +61,7 @@ where
     }
     pub fn into_stream(
         mut self,
-    ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Vec<u8>, Error>> + 'static>> {
+    ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Frame<VecDeque<u8>>, Error>> + 'static>> {
         let stream = stream! {
             loop {
                 let mut buf = vec![0; self.buf_size];
@@ -31,7 +70,7 @@ where
                     break
                 }
                 buf.truncate(r);
-                yield Ok(buf);
+                yield Ok(Frame::data(buf.into()));
             }
         };
         stream.boxed()
@@ -41,7 +80,7 @@ where
     pub fn into_stream_sized(
         mut self,
         max_length: u64,
-    ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Vec<u8>, Error>> + 'static>> {
+    ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Frame<VecDeque<u8>>, Error>> + 'static>> {
         let stream = stream! {
             let mut remaining = max_length;
             loop {
@@ -57,10 +96,9 @@ where
                 let r = self.reader.read(&mut buf).await?;
                 if r == 0 {
                     break;
-                } else {
-                    buf.truncate(r);
-                    yield Ok(buf);
                 }
+                buf.truncate(r);
+                yield Ok(Frame::data(buf.into()));
                 remaining -= r as u64;
             }
         };

@@ -1,12 +1,17 @@
-use crate::streamer::Streamer;
+use crate::streamer::{Empty, Streamer};
 use bmart_derive::EnumStr;
-use hyper::{http, Body, Response, StatusCode};
+use hyper::{body::Body, http, Response, StatusCode};
+use std::collections::VecDeque;
 use std::io::SeekFrom;
 use std::path::Path;
+use std::pin::Pin;
 use tokio::fs::File;
 use tokio::io::AsyncSeekExt;
 
 pub static DEFAULT_MIME_TYPE: &str = "application/octet-stream";
+
+pub type ResponseStreamed =
+    Response<Pin<Box<dyn Body<Data = VecDeque<u8>, Error = std::io::Error> + 'static + Send>>>;
 
 const TIME_STR: &str = "%a, %d %b %Y %T %Z";
 
@@ -52,7 +57,7 @@ impl Error {
     }
 }
 
-impl From<Error> for Result<Response<Body>, http::Error> {
+impl From<Error> for Result<ResponseStreamed, http::Error> {
     fn from(err: Error) -> Self {
         let code = match err.kind() {
             ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
@@ -60,7 +65,9 @@ impl From<Error> for Result<Response<Body>, http::Error> {
             ErrorKind::NotFound => StatusCode::NOT_FOUND,
             ErrorKind::BadRequest => StatusCode::BAD_REQUEST,
         };
-        Response::builder().status(code).body(Body::empty())
+        Response::builder()
+            .status(code)
+            .body(Box::pin(Empty::new()))
     }
 }
 
@@ -145,7 +152,7 @@ pub async fn static_file<'a>(
     mime_type: Option<&str>,
     headers: &hyper::header::HeaderMap,
     buf_size: usize,
-) -> Result<Result<Response<Body>, http::Error>, Error> {
+) -> Result<Result<ResponseStreamed, http::Error>, Error> {
     macro_rules! forbidden {
         () => {
             return Err(Error::forbidden())
@@ -160,7 +167,7 @@ pub async fn static_file<'a>(
         () => {
             return Ok(Response::builder()
                 .status(StatusCode::NOT_MODIFIED)
-                .body(Body::empty()));
+                .body(Box::pin(Empty::new())));
         };
     }
     let range = if let Some(range_hdr) = headers.get(hyper::header::RANGE) {
@@ -237,19 +244,23 @@ pub async fn static_file<'a>(
                     format!("bytes {}-{}/{}", rn.start, rn.end.unwrap_or(size - 1), size),
                 )
                 .header(hyper::header::CONTENT_LENGTH, part_size)
-                .body(Body::wrap_stream(reader.into_stream_sized(part_size)))
+                .body(Box::pin(http_body_util::StreamBody::new(
+                    reader.into_stream_sized(part_size),
+                )))
         } else {
             Response::builder()
                 .status(StatusCode::RANGE_NOT_SATISFIABLE)
                 .header(hyper::header::ACCEPT_RANGES, "bytes")
                 .header(hyper::header::CONTENT_RANGE, format!("*/{}", size))
-                .body(Body::empty())
+                .body(Box::pin(Empty::new()))
         }
     } else {
         let reader = Streamer::new(f, buf_size);
         resp!(StatusCode::OK, last_modified, etag, mime_type)
             .header(hyper::header::CONTENT_LENGTH, size)
-            .body(Body::wrap_stream(reader.into_stream()))
+            .body(Box::pin(http_body_util::StreamBody::new(
+                reader.into_stream(),
+            )))
     })
 }
 

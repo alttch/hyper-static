@@ -1,6 +1,6 @@
 [package]
 name = "hyper-static"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.60"
 license = "MIT"
@@ -10,16 +10,17 @@ description = "A static file handler for Rust/Hyper with minimal logic"
 keywords = ["hyper", "static", "file", "server", "http"]
 
 [dependencies]
-hyper = { version = "0.14.18", features = ["stream"] }
-tokio = { version = "1.15.0", features = ["io-util", "fs"] }
+hyper = { version = "1.1.0" }
+tokio = { version = "1.35.1", features = ["io-util", "fs"] }
 hex = "0.4.3"
-async-stream = "0.3.3"
-chrono = "0.4.19"
-chrono-tz = "0.7.0"
-futures = "0.3.21"
+async-stream = "0.3.5"
+chrono = "0.4.31"
+chrono-tz = "0.8.5"
+futures = "0.3.30"
 bmart-derive = "0.1.2"
-openssl = { version = "0.10.42", optional = true }
-sha2 = { version = "0.10.6", optional = true }
+openssl = { version = "0.10.62", optional = true }
+sha2 = { version = "0.10.8", optional = true }
+http-body-util = "0.1.0"
 
 [features]
 default = ["hashing-openssl"]
