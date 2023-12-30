@@ -1,8 +1,8 @@
+use crate::ErrorBoxed;
 use async_stream::stream;
 use futures::{Stream, StreamExt};
 use hyper::body::{Body, Buf, Frame, SizeHint};
 use std::collections::VecDeque;
-use std::io::Error;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -24,7 +24,7 @@ where
 
 impl<D: Buf> Body for Empty<D> {
     type Data = D;
-    type Error = Error;
+    type Error = ErrorBoxed;
 
     #[inline]
     fn poll_frame(
@@ -43,7 +43,7 @@ impl<D: Buf> Body for Empty<D> {
     }
 }
 
-pub struct Streamer<R>
+pub struct File<R>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
@@ -51,7 +51,14 @@ where
     buf_size: usize,
 }
 
-impl<R> Streamer<R>
+macro_rules! boxed_err {
+    ($e: expr) => {{
+        let err: ErrorBoxed = Box::new($e);
+        err
+    }};
+}
+
+impl<R> File<R>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
@@ -61,11 +68,12 @@ where
     }
     pub fn into_stream(
         mut self,
-    ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Frame<VecDeque<u8>>, Error>> + 'static>> {
+    ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Frame<VecDeque<u8>>, ErrorBoxed>> + 'static>>
+    {
         let stream = stream! {
             loop {
                 let mut buf = vec![0; self.buf_size];
-                let r = self.reader.read(&mut buf).await?;
+                let r = self.reader.read(&mut buf).await.map_err(|e| boxed_err!(e))?;
                 if r == 0 {
                     break
                 }
@@ -80,7 +88,8 @@ where
     pub fn into_stream_sized(
         mut self,
         max_length: u64,
-    ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Frame<VecDeque<u8>>, Error>> + 'static>> {
+    ) -> Pin<Box<impl ?Sized + Stream<Item = Result<Frame<VecDeque<u8>>, ErrorBoxed>> + 'static>>
+    {
         let stream = stream! {
             let mut remaining = max_length;
             loop {
@@ -93,7 +102,7 @@ where
                     remaining as usize
                 };
                 let mut buf = vec![0; bs];
-                let r = self.reader.read(&mut buf).await?;
+                let r = self.reader.read(&mut buf).await.map_err(|e| boxed_err!(e))?;
                 if r == 0 {
                     break;
                 }

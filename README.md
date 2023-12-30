@@ -7,6 +7,8 @@ The idea is to have a static file handler with no overhead. Make any handler
 function for Hyper, with own logic, if a static file needs to be returned -
 give the crate a path and that is it.
 
+For Hyper 0.14 use the crate version 0.1.x.
+
 * serves large files with zero-copy buffers
 * correctly handles partial requests (Content-Range)
 * handles If-Modified-Since, If-None-Match
@@ -15,10 +17,9 @@ give the crate a path and that is it.
 Example:
 
 ```rust,ignore
-use hyper_static::serve::static_file;
+use hyper_static::{serve::static_file, Streamed};
 
-// define some hyper handler
-async fn handler(req: Request<Incoming>) -> Result<ResponseStreamed, http::Error> {
+async fn handler(req: Request<Incoming>) -> Result<Streamed, http::Error> {
     // ....
     // serve a file when necessary
     // in a simple way
@@ -27,7 +28,7 @@ async fn handler(req: Request<Incoming>) -> Result<ResponseStreamed, http::Error
     return match static_file(
         &path,
         Some("application/octet-stream"), // mime type
-        &req.headers(),                   // hyper request header map
+        req.headers(),                    // hyper request header map
         65536,                            // buffer size
     )
     .await
@@ -36,10 +37,10 @@ async fn handler(req: Request<Incoming>) -> Result<ResponseStreamed, http::Error
         Err(e) => e.into(), // transform the error and return
     };
     //more complicated - analyze errors, e.g. log them
-    return match static_file(
+    match static_file(
         &path,
         Some("application/octet-stream"),
-        &req.headers(),
+        req.headers(),
         65536,
     )
     .await
@@ -53,7 +54,7 @@ async fn handler(req: Request<Incoming>) -> Result<ResponseStreamed, http::Error
             v
         }
         Err(e) => {
-            let resp: Result<ResponseStreamed, http::Error> = e.into();
+            let resp: Result<Streamed, http::Error> = e.into();
             eprintln!(
                 r#""GET {}" {}"#,
                 req.uri(),
@@ -61,6 +62,6 @@ async fn handler(req: Request<Incoming>) -> Result<ResponseStreamed, http::Error
             );
             resp
         }
-    };
+    }
 }
 ```

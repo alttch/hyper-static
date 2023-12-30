@@ -1,17 +1,13 @@
-use crate::streamer::{Empty, Streamer};
+use crate::streamer::{Empty, File as FileStreamer};
+use crate::Streamed;
 use bmart_derive::EnumStr;
-use hyper::{body::Body, http, Response, StatusCode};
-use std::collections::VecDeque;
+use hyper::{http, Response, StatusCode};
 use std::io::SeekFrom;
 use std::path::Path;
-use std::pin::Pin;
 use tokio::fs::File;
 use tokio::io::AsyncSeekExt;
 
 pub static DEFAULT_MIME_TYPE: &str = "application/octet-stream";
-
-pub type ResponseStreamed =
-    Response<Pin<Box<dyn Body<Data = VecDeque<u8>, Error = std::io::Error> + 'static + Send>>>;
 
 const TIME_STR: &str = "%a, %d %b %Y %T %Z";
 
@@ -57,7 +53,7 @@ impl Error {
     }
 }
 
-impl From<Error> for Result<ResponseStreamed, http::Error> {
+impl From<Error> for Result<Streamed, http::Error> {
     fn from(err: Error) -> Self {
         let code = match err.kind() {
             ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
@@ -152,7 +148,7 @@ pub async fn static_file<'a>(
     mime_type: Option<&str>,
     headers: &hyper::header::HeaderMap,
     buf_size: usize,
-) -> Result<Result<ResponseStreamed, http::Error>, Error> {
+) -> Result<Result<Streamed, http::Error>, Error> {
     macro_rules! forbidden {
         () => {
             return Err(Error::forbidden())
@@ -237,7 +233,7 @@ pub async fn static_file<'a>(
             let part_size = rn
                 .end
                 .map_or_else(|| size - rn.start, |end| end - rn.start + 1);
-            let reader = Streamer::new(f, buf_size);
+            let reader = FileStreamer::new(f, buf_size);
             resp!(StatusCode::PARTIAL_CONTENT, last_modified, etag, mime_type)
                 .header(
                     hyper::header::CONTENT_RANGE,
@@ -255,7 +251,7 @@ pub async fn static_file<'a>(
                 .body(Box::pin(Empty::new()))
         }
     } else {
-        let reader = Streamer::new(f, buf_size);
+        let reader = FileStreamer::new(f, buf_size);
         resp!(StatusCode::OK, last_modified, etag, mime_type)
             .header(hyper::header::CONTENT_LENGTH, size)
             .body(Box::pin(http_body_util::StreamBody::new(
